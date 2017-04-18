@@ -1,5 +1,5 @@
 # OPT ?= -O2 -DNDEBUG     # (A) Production use (optimized mode)
-OPT ?= -g2 -Wall -fPIC  -std=c++0x       # (B) Debug mode, w/ full line-level debugging symbols
+OPT ?= -g2 -O2 -Wall -fPIC  -std=c++0x       # (B) Debug mode, w/ full line-level debugging symbols
 # OPT ?= -O2 -g2 -DNDEBUG # (C) Profiling mode: opt, but w/debugging symbols
 
 # Thirdparty
@@ -72,28 +72,17 @@ BIN = airdb cli
 
 all: $(BIN)
 
-#nexus_ldb=/home/tera/ins/thirdparty/leveldb/libleveldb.a 
-#nexus_ldb: 
-#	cd ./thirdparty/leveldb && make
-# Depends
-#$(_OBJ): $(PROTO_HEADER)
-
 
 cli: $(CLI_OBJ)  $(OBJS)
-	#@echo "===="$<
 	$(CXX) $(CLI_OBJ)  $(OBJS) -o $@ $(LDFLAGS)
 
-# Targets
 airdb: $(SVR_OBJ)  $(OBJS)
-	#@echo "===="$<
 	$(CXX) $(SVR_OBJ)  $(OBJS) -o $@ $(LDFLAGS)
 
 %.o: %.cc
-	#@echo "===="$<
 	$(CXX) $(CXXFLAGS) $(INCLUDE_PATH) -c $< -o $@
 
 %.pb.h %.pb.cc: %.proto
-    	#@echo "=====aa==="
 	$(PROTOC) --proto_path=./proto/ --proto_path=/usr/local/include --cpp_out=./proto/ $<
 
 .PHONY:clean
