@@ -1,5 +1,5 @@
-#ifndef _GALAXY_SDK_STORAGE_MANAGE_H_
-#define _GALAXY_SDK_STORAGE_MANAGE_H_
+#ifndef STORAGE_KV_H_
+#define STORAGE_KV_H_
 
 #include <string>
 #include <map>

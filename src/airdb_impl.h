@@ -1,7 +1,5 @@
-#ifndef AIRDB_NODE_IMPL_H_
-#define AIRDB_NODE_IMPL_H_
-
-#include "proto/airdb_node.pb.h"
+#ifndef AIRDB_IMPL_H_
+#define AIRDB_IMPL_H_
 
 #include <stdint.h>
 #include <string>
@@ -10,6 +8,7 @@
 #include <set>
 #include <boost/shared_ptr.hpp>
 #include <boost/unordered_map.hpp>
+#include "proto/airdb_node.pb.h"
 #include <stdint.h>
 #include <unistd.h>
 #include "common/mutex.h"
@@ -114,8 +113,6 @@ public:
 
 
 }//end namespace
-
-
 
 #endif
 

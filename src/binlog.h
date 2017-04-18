@@ -1,12 +1,12 @@
-#ifndef GALAXY_SDK_BINGLOG_H_
-#define GALAXY_SDK_BINGLOG_H_
-#include "proto/airdb_node.pb.h"
-#include "leveldb/write_batch.h"
-#include "leveldb/db.h"
+#ifndef BINLOG_H_
+#define BINLOG_H_
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
 #include <boost/function.hpp>
+#include "proto/airdb_node.pb.h"
+#include "leveldb/write_batch.h"
+#include "leveldb/db.h"
 #include "mutex.h"
 
 using common::Mutex;

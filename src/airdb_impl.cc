@@ -1,7 +1,4 @@
 #include "airdb_impl.h"
-#include "binlog.h"
-#include "leveldb/db.h"
-#include "leveldb/status.h"
 #include <assert.h>
 #include <sys/utsname.h>
 #include <boost/algorithm/string/replace.hpp>
@@ -15,6 +12,9 @@
 #include <vector>
 #include <sofa/pbrpc/pbrpc.h>
 #include <iostream>
+#include "binlog.h"
+#include "leveldb/db.h"
+#include "leveldb/status.h"
 
 DECLARE_int32(max_cluster_size);
 DECLARE_int32(vote_timeout_max);
