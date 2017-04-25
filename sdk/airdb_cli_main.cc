@@ -92,7 +92,19 @@ int main(int argc, char** argv) {
         } else {
              std::cout << "get failed " << std::endl;
         }
-    } else {
+    } else if (FLAGS_airdb_cmd == "del") {
+        std::string del_key = FLAGS_airdb_key;
+        int ret = sdk.Delete(del_key);
+        if (ret == 0) {
+            std::cout << "del key[" << del_key << "] success" << std::endl;
+            return 0;
+        } else {
+            std::cout << "del key[" << del_key << "] failed" << std::endl;
+            return -1;
+        }
+    } 
+    
+    else {
 	std::cout << " the cmd not support " << std::endl;
     }
     int64_t end_time = common::get_micros();

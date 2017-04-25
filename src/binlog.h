@@ -37,6 +37,7 @@ public:
     void Truncate(int64_t trunc_slot_index);
     void LoadBinLogEntry(const std::string& buf, BinLogEntry* log_entry);
     void DumpBinLogEntry(const BinLogEntry& log_entry, std::string* buf);
+    void RemoveSlotBefore(int64_t slot_gc_index);
     void WriteEntry(const BinLogEntry& log_entry);
     void WriteEntryList(const ::google::protobuf::RepeatedPtrField<Entry> &entries);
 private:

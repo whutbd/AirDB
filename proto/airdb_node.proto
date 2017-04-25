@@ -13,7 +13,8 @@ enum BinLogOperation {
     kGetOp = 2;
     kDeleteOp = 3;
     kLockOp = 4;
-    kNop = 5;
+    kUnLockOp = 5;
+    kNop = 6;
 }
 
 message Entry {
@@ -84,10 +85,50 @@ message GetResponse {
     optional string leader_id = 4;
 };
 
+message DelRequest {
+    required bytes key = 1;
+};
+
+message DelResponse {
+    required bool success = 1;
+    optional string leader_id = 2;
+};
+
+message LockRequest {
+    required bytes key = 1;
+};
+
+message LockResponse {
+    required bool success = 1;
+    optional string leader_id = 2;
+};
+
+message UnLockRequest {
+    required bytes key = 1;
+}
+
+
+message UnLockResponse {
+    required bool success = 1;
+    optional string leader_id = 2;
+}
+
+message CleanBinlogRequest {
+    required int64 end_index = 1;
+};
+
+message CleanBinlogResponse {
+    required bool success = 1;
+};
+
 service AirDB {
     rpc Vote(VoteRequest) returns (VoteResponse);
     rpc Put(PutRequest) returns(PutResponse);
     rpc Get(GetRequest) returns(GetResponse);
+    rpc Delete(DelRequest) returns(DelResponse);
+    rpc Lock(LockRequest) returns(LockResponse);
+    rpc UnLock(UnLockRequest) returns (UnLockResponse);
     rpc AppendEntries(AppendEntriesRequest) returns(AppendEntriesResponse);
     rpc ShowStatus(ShowStatusRequest) returns(ShowStatusResponse);
+    rpc CleanBinlog(CleanBinlogRequest) returns(CleanBinlogResponse);
 }

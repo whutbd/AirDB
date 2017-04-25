@@ -54,7 +54,7 @@ int AirDBSdk::Put(const std::string& key, const std::string& value) {
 
 
 int AirDBSdk::Get(const std::string& key, std::string* value) {
-    std::vector<std::string>::const_iterator it ;
+    std::vector<std::string>::const_iterator it;
     for (it = server_members_.begin(); it != server_members_.end(); ++it) {
         std::string server_id = *it;
         AirDB_Stub* stub;
@@ -77,6 +77,71 @@ int AirDBSdk::Get(const std::string& key, std::string* value) {
 }
 
 
+int AirDBSdk::Delete(const std::string& key) {
+    std::vector<std::string>::const_iterator it;
+    for (it = server_members_.begin(); it != server_members_.end(); ++it) {
+        std::string server_id = *it;
+        AirDB_Stub* stub;
+        rpc_client_->GetStub(server_id, &stub);
+        boost::scoped_ptr<AirDB_Stub> stub_guard(stub);
+        DelRequest request;
+        DelResponse response;
+        request.set_key(key);
+        bool ok = rpc_client_->SendRequest(stub, &AirDB_Stub::Delete, &request, &response, 2, 1);
+        if (!ok) {
+            LOG(INFO, "rpc failed");
+            continue;
+        }
+        if (response.success()) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int AirDBSdk::Lock(const std::string& key) {
+    std::vector<std::string>::const_iterator it;
+    for (it = server_members_.begin(); it != server_members_.end(); ++it) {
+        std::string server_id = *it;
+        AirDB_Stub* stub;
+        rpc_client_->GetStub(server_id, &stub);
+        boost::scoped_ptr<AirDB_Stub> stub_guard(stub);
+        LockRequest request;
+        LockResponse response;
+        request.set_key(key);
+        bool ok = rpc_client_->SendRequest(stub, &AirDB_Stub::Lock, &request, &response, 2, 1);
+        if (!ok) {
+            LOG(INFO, "rpc failed");
+            continue;
+        }
+        if (response.success()) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int AirDBSdk::UnLock(const std::string& key) {
+    std::vector<std::string>::const_iterator it;
+    for (it = server_members_.begin(); it != server_members_.end(); ++it) {
+        std::string server_id = *it;
+        AirDB_Stub* stub;
+        rpc_client_->GetStub(server_id, &stub);
+        boost::scoped_ptr<AirDB_Stub> stub_guard(stub);
+        UnLockRequest request;
+        UnLockResponse response;
+        request.set_key(key);
+        bool ok = rpc_client_->SendRequest(stub, &AirDB_Stub::UnLock, &request, &response, 2, 1);
+        if (!ok) {
+            LOG(INFO, "rpc failed");
+            continue;
+        }
+        if (response.success()) {
+            return 0;
+        }
+    }
+    return -1;
+}
 
 int AirDBSdk::ShowClusterStatus(std::vector<NodeInfo>& cluster_info) {
     std::vector<std::string>::iterator iter = server_members_.begin();

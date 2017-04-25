@@ -20,6 +20,7 @@ DECLARE_int32(max_cluster_size);
 DECLARE_int32(vote_timeout_max);
 DECLARE_int32(vote_timeout_min);
 DECLARE_int32(heartbeat_delay);
+DECLARE_int32(db_gc_interval);
 DECLARE_string(binlog_dir);
 DECLARE_string(db_data_dir);
 DECLARE_bool(binlog_compress);
@@ -45,6 +46,7 @@ AirDBImpl::AirDBImpl(std::string& server_id,
 			self_addr_(server_id),
 			commit_index_(-1),
                         last_applied_index_(-1),
+                        last_safe_clean_index_(-1),
                         data_store_(NULL){ 
     binlogger_ = new BinLogger(FLAGS_binlog_dir  + "/" + server_id,
     			     FLAGS_binlog_compress);
@@ -70,6 +72,7 @@ AirDBImpl::AirDBImpl(std::string& server_id,
         last_applied_index_ =  BinLogger::StringToInt(tag_value);
     }
     commit_pool_.AddTask(boost::bind(&AirDBImpl::CommitIndex, this));
+    binlog_cleaner_pool_.AddTask(boost::bind(&AirDBImpl::GarbageClean, this));
     LOG(INFO, "all server size is [%d]", all_server_addr_.size());
     LoopVoteLeader();
 }
@@ -99,6 +102,7 @@ void AirDBImpl::CommitIndex() {
         int64_t end_idx = commit_index_;
         mu_.Unlock();
         LOG(INFO, "begin to CommitIndex");
+        int ret = -1;
         for(int i = start_idx + 1; i <= end_idx; ++i) {
             LOG(INFO, "==== aaa ;binglog read i is [%d]===", i);
             BinLogEntry log_entry;
@@ -108,6 +112,7 @@ void AirDBImpl::CommitIndex() {
             LOG(INFO, "====bbb===");
             switch(log_entry.op) {
                 case kPutOp:
+                case kLockOp:
                      LOG(INFO, "beign commit put");
                      type_and_value.append(1, static_cast<char>(log_entry.op));
                      type_and_value.append(log_entry.value);
@@ -116,6 +121,14 @@ void AirDBImpl::CommitIndex() {
                      LOG(INFO, "commit put success");
                     // assert(s == kOk);
                      break;
+                case kDeleteOp:
+                case kUnLockOp:
+                     LOG(INFO, "del key[%s]",log_entry.key.c_str());
+                     ret = data_store_->Delete(log_entry.key);
+                     if (ret != 0) {
+                        LOG(WARN, "del key[%s] failed", log_entry.key.c_str());
+                        break;
+                     }
                 default:
                      break;
             }
@@ -124,6 +137,21 @@ void AirDBImpl::CommitIndex() {
                 SdkAck& ack = sdk_ack_[i];
                 if (ack.put_res) {
                     ack.put_res->set_success(true);
+                    ack.done->Run();
+                } 
+                if (ack.del_res) {
+                    ack.del_res->set_success(true);
+                    ack.del_res->set_leader_id(cur_leader_addr_);
+                    ack.done->Run();
+                }
+                if (ack.lock_res) {
+                    ack.lock_res->set_success(true);
+                    ack.lock_res->set_leader_id(cur_leader_addr_);
+                    ack.done->Run();
+                }
+                if (ack.unlock_res) {
+                    ack.unlock_res->set_success(true);
+                    ack.unlock_res->set_leader_id(cur_leader_addr_);
                     ack.done->Run();
                 }
                 sdk_ack_.erase(i);
@@ -487,7 +515,10 @@ void AirDBImpl::BroadCastHeartBeat() {
 	//send heart beat req
 	AirDB_Stub* stub;
 	rpc_client_.GetStub(*iter, &stub);
-	boost::scoped_ptr<AirDB_Stub> stub_guard(stub);
+	if (stub == NULL) {
+            LOG(INFO, "NULL");
+        }
+        boost::scoped_ptr<AirDB_Stub> stub_guard(stub);
         AppendEntriesRequest* req = new AppendEntriesRequest();
 	AppendEntriesResponse* res = new AppendEntriesResponse();
 	//LOG(INFO, "BroadCastHeartBeat , current_term[%d]",current_term_);
@@ -742,6 +773,192 @@ void AirDBImpl::ParseValue(const std::string& value,
     }
 }
 
+
+void AirDBImpl::Delete(google::protobuf::RpcController* controller,
+           const DelRequest* req, DelResponse* res,
+           google::protobuf::Closure* done) {
+    MutexLock lock(&mu_);
+    if (status_ == kFollower) {
+        res->set_success(false);
+        res->set_leader_id(cur_leader_addr_);
+        done->Run();
+        return;
+    } else if (status_ == kCandidate) {
+        res->set_success(false);
+        res->set_leader_id("");
+        done->Run();
+        return;
+    }
+    const std::string key = req->key();
+    BinLogEntry log_entry;
+    log_entry.key = key;
+    log_entry.value = "";
+    log_entry.term = current_term_;
+    log_entry.op = kDeleteOp;
+    binlogger_->WriteEntry(log_entry);
+    int64_t cur_index = binlogger_->GetLength() - 1;
+    SdkAck& ack = sdk_ack_[cur_index];
+    ack.done = done;
+    ack.del_res = res;
+    //notify do replica
+    replica_cond_->Broadcast();
+    return;
+}
+
+void AirDBImpl::Lock(google::protobuf::RpcController* controller,
+                     const LockRequest* req, LockResponse* res,
+                     google::protobuf::Closure* done) {
+                     
+    MutexLock lock(&mu_);
+    if (status_ == kFollower) {
+        res->set_success(false);
+        res->set_leader_id(cur_leader_addr_);
+        done->Run();
+        return;
+    } else if (status_ == kCandidate) {
+        res->set_success(false);
+        res->set_leader_id("");
+        done->Run();
+        return;
+    }
+    const std::string& lock_key = req->key();
+    BinLogEntry log_entry;
+    log_entry.key = lock_key;
+    log_entry.value = lock_key;
+    log_entry.term = current_term_;
+    log_entry.op = kLockOp;
+    /*std::string type_and_value;
+    type_and_value.append(1, static_cast<char>(kLockOp));
+    type_and_value.append(lock_key);
+    int ret = data_store_->Put(user, key, type_and_value);
+    if (ret != 0) {
+        LOG(WARN, "data store put error");
+        return;
+    }*/
+    binlogger_->WriteEntry(log_entry);
+    int64_t cur_index = binlogger_->GetLength() - 1;
+    SdkAck& ack = sdk_ack_[cur_index];
+    ack.done = done;
+    ack.lock_res = res;
+    replica_cond_->Broadcast();
+    return ;
+}
+
+void AirDBImpl::UnLock(google::protobuf::RpcController* controller,
+                     const UnLockRequest* req, UnLockResponse* res,
+                     google::protobuf::Closure* done) {
+
+    MutexLock lock(&mu_);
+    if (status_ == kFollower) {
+        res->set_success(false);
+        res->set_leader_id(cur_leader_addr_);
+        done->Run();
+        return;
+    } else if (status_ == kCandidate) {
+        res->set_success(false);
+        res->set_leader_id("");
+        done->Run();
+        return;
+    }
+    const std::string& unlock_key = req->key();
+    BinLogEntry log_entry;
+    log_entry.key = unlock_key;
+    log_entry.value = unlock_key;
+    log_entry.term = current_term_;
+    log_entry.op = kLockOp;
+    
+    binlogger_->WriteEntry(log_entry);
+    int64_t cur_index = binlogger_->GetLength() - 1;
+    SdkAck& ack = sdk_ack_[cur_index];
+    ack.done = done;
+    ack.unlock_res = res;
+    replica_cond_->Broadcast();
+    return ;
+}
+
+void AirDBImpl::GarbageClean() {
+    MutexLock lock(&mu_);
+    if (status_ == kLeader) {
+        LOG(INFO, "this is GarbageClean");
+        bool ret_all = true;
+        int64_t min_applied_index = std::numeric_limits<int64_t>::max();;
+        std::vector<std::string>::iterator it;
+        mu_.Unlock();
+        for(it = all_server_addr_.begin(); it != all_server_addr_.end(); it++) { 
+            AirDB_Stub* stub;
+            std::string server_id = *it;
+            rpc_client_.GetStub(server_id, &stub);
+            boost::scoped_ptr<AirDB_Stub> stub_guard(stub);
+            ShowStatusRequest request;
+            ShowStatusResponse response;
+            bool ok = rpc_client_.SendRequest(stub, &AirDB_Stub::ShowStatus,
+                        &request, &response, 2, 1);
+            if (!ok) {
+                ret_all = false;
+                LOG(INFO,"ShowStatus happen error");
+                break;
+            } else {
+                LOG(INFO,"last_applied is [%d]", response.last_applied());
+                min_applied_index = std::min(min_applied_index, response.last_applied());
+                LOG(INFO,"min_last_applied_idx is [%d]", min_applied_index);
+            }
+        }
+        if (ret_all) {
+            int64_t safe_clean_index = min_applied_index - 1;
+            int64_t old_index;
+            {
+                MutexLock lock(&mu_);
+                old_index = last_safe_clean_index_;
+                last_safe_clean_index_ = safe_clean_index;
+            }
+            if (old_index != safe_clean_index) {
+                LOG(INFO, "[gc] safe clean index is : %ld", safe_clean_index);
+                for (it = all_server_addr_.begin(); it != all_server_addr_.end(); it++) {
+                    AirDB_Stub* stub;
+                    std::string server_id = *it;
+                    rpc_client_.GetStub(server_id, &stub);
+                    boost::scoped_ptr<AirDB_Stub> stub_guard(stub);
+                    CleanBinlogRequest request;
+                    CleanBinlogResponse response;
+                    request.set_end_index(safe_clean_index);
+                    bool ok = rpc_client_.SendRequest(stub, &AirDB_Stub::CleanBinlog, 
+                                        &request, &response, 5, 3);
+                    if (!ok) {
+                        LOG(INFO, "failed to clean binlog request to %s", server_id.c_str());
+                    }
+                }
+            }
+        }
+    }
+    binlog_cleaner_pool_.DelayTask(FLAGS_db_gc_interval * 1000,
+                boost::bind(&AirDBImpl::GarbageClean, this));
+}
+
+void AirDBImpl::CleanBinlog(::google::protobuf::RpcController*,
+                            const CleanBinlogRequest* request,
+                            CleanBinlogResponse* response,
+                            ::google::protobuf::Closure* done) {
+    LOG(INFO, "recv CleanBinlog req");
+    int64_t del_end_index = request->end_index();
+    {
+        MutexLock lock(&mu_);
+        if (last_applied_index_ < del_end_index) {
+            LOG(WARN, "del log  %ld > %ld is unsafe",
+                        del_end_index, last_applied_index_);
+            response->set_success(false);
+            done->Run();
+            return;
+        }
+    }    
+    binlog_cleaner_pool_.AddTask(boost::bind(&AirDBImpl::DelBinlog, this, del_end_index -1 ));
+    response->set_success(true);
+    done->Run();
+}
+
+void AirDBImpl::DelBinlog(int64_t index) {
+    LOG(INFO, "delete binlog before [%ld]", index);
+    binlogger_->RemoveSlotBefore(index);
+}
 
 }//end namespace
 

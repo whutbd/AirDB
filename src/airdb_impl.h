@@ -33,8 +33,13 @@ class BinLogger;
 
 struct SdkAck {
     PutResponse* put_res;
+    DelResponse* del_res;
+    LockResponse* lock_res;
+    UnLockResponse* unlock_res;
     google::protobuf::Closure* done;
-    SdkAck() : put_res(NULL), done(NULL){} 
+    SdkAck() : put_res(NULL), del_res(NULL), 
+               lock_res(NULL), unlock_res(NULL),
+               done(NULL){} 
 
 };
 
@@ -59,6 +64,8 @@ public:
     void UpdateCommitIndex(int64_t index);
     void CommitIndex(); 
     void ParseValue(const std::string& value, BinLogOperation& op, std::string& real_value);
+    void GarbageClean();
+    void DelBinlog(int64_t index);
     void AppendEntries(::google::protobuf::RpcController*, 
     		       const AppendEntriesRequest* req, 
 		       AppendEntriesResponse* res, 
@@ -82,6 +89,19 @@ public:
     void Get(google::protobuf::RpcController* controller,
 		const GetRequest* req, GetResponse* res,
 		google::protobuf::Closure* done);
+    void Delete(google::protobuf::RpcController* controller,
+		const DelRequest* req, DelResponse* res,
+                google::protobuf::Closure* done);
+    void Lock(google::protobuf::RpcController* controller,
+		const LockRequest* req, LockResponse* res,
+                google::protobuf::Closure* done);
+    void UnLock(google::protobuf::RpcController* controller,
+		const UnLockRequest* req, UnLockResponse* res,
+                google::protobuf::Closure* done);
+    void CleanBinlog(google::protobuf::RpcController* controller,
+                 const CleanBinlogRequest* request,
+                 CleanBinlogResponse* response,
+                 ::google::protobuf::Closure* done);
 public:
     RpcClient rpc_client_;
     BinLogger* binlogger_;
@@ -90,6 +110,7 @@ public:
     ThreadPool follower_work_pool_;
     ThreadPool replica_pool_;
     ThreadPool commit_pool_;
+    ThreadPool binlog_cleaner_pool_;
     Mutex mu_;
     CondVar* replica_cond_;
     CondVar* commit_cond_;
@@ -101,6 +122,7 @@ public:
     std::string cur_leader_addr_;
     int64_t commit_index_;
     int64_t last_applied_index_;
+    int64_t last_safe_clean_index_;
     std::vector<std::string> all_server_addr_;
     std::map<int64_t, std::string> vote_for_;
     std::map<int64_t, int> vote_pass_;

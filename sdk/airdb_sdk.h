@@ -33,6 +33,9 @@ public:
     ~AirDBSdk();
     int Put(const std::string& key, const std::string& value);
     int Get(const std::string& key, std::string* value);
+    int Delete(const std::string& key);
+    int Lock(const std::string& key);
+    int UnLock(const std::string& key);
     int static ParseFlagFromArgs(int argc, char** argv, 
     		std::vector<std::string>& memers);
     static std::string StatusToString(int32_t status);

@@ -247,5 +247,8 @@ void BinLogger::WriteEntryList(const ::google::protobuf::RepeatedPtrField<Entry>
     LOG(INFO, "==== BinLogger len[%d]", length_);
 }
 
+void BinLogger::RemoveSlotBefore(int64_t slot_gc_index) {
+    db_->SetNexusGCKey(slot_gc_index);
+} 
 
 }

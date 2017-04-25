@@ -10,6 +10,7 @@ DEFINE_bool(binlog_compress, true, "min vote timeout (ms)");
 DEFINE_bool(db_data_compress, true, "enable snappy compression on leveldb storage");
 DEFINE_int32(db_data_block_size, 4, "for data, leveldb block_size, KB");
 DEFINE_int32(db_data_write_buffer_size, 4, "for data, leveldb write_buffer_size, MB");
+DEFINE_int32(db_gc_interval, 600, "binlog clean interval (seconds)");
 
 //binlog
 DEFINE_string(binlog_dir, "binlog", "write-ahead log directory path");
