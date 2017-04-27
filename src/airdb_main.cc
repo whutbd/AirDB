@@ -46,20 +46,16 @@ int main(int argc, char** argv) {
     sofa::pbrpc::RpcServer rpc_server(options);
     
     std::vector<std::string> members;
-    std::cout << FLAGS_cluster_members << std::endl;
     boost::split(members, FLAGS_cluster_members,
                     boost::is_any_of(","), boost::token_compress_on);
     std::string server_id = members.at(FLAGS_server_id - 1);
     log_name = log_name + "." + server_id;
-    std::cout << "=============" << log_name << std::endl;
     //log init
     g_cfg.SetLogPath(log_path);
     g_cfg.SetLogName(log_name);
     LOG_INIT();
-    std::cout << "server_id is " << server_id << std::endl;
     airdb::AirDBImpl* db_node = new airdb::AirDBImpl(server_id, members);
     if (db_node == NULL) {
-        std::cout << "============ NULL ======" << std::endl;
         return -1;
     }
     if (!rpc_server.RegisterService(static_cast<airdb::AirDBImpl*>(db_node))) {
