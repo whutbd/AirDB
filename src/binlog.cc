@@ -101,7 +101,6 @@ void BinLogger::Truncate(int64_t trunk_slot_index) {
     if (trunk_slot_index < -1) {
         trunk_slot_index = -1;
     }
-    LOG(INFO, "====BinLogger Truncate======");
     {
         MutexLock lock(&mu_);
         length_ = trunk_slot_index + 1;
@@ -224,7 +223,6 @@ void BinLogger::WriteEntry(const BinLogEntry& log_entry) {
 }
 
 void BinLogger::WriteEntryList(const ::google::protobuf::RepeatedPtrField<Entry> &entries) {
-    LOG(INFO, "====BinLogger WriteEntryList======");
     MutexLock lock(&mu_);
     leveldb::WriteBatch batch;
     int64_t cur_index = length_;
@@ -244,11 +242,10 @@ void BinLogger::WriteEntryList(const ::google::protobuf::RepeatedPtrField<Entry>
     leveldb::Status status = db_->Write(leveldb::WriteOptions(), &batch);
     assert(status.ok());
     length_ += entries.size();
-    LOG(INFO, "==== BinLogger len[%d]", length_);
 }
 
 void BinLogger::RemoveSlotBefore(int64_t slot_gc_index) {
-    db_->SetNexusGCKey(slot_gc_index);
+    db_->SetDBGCKey(slot_gc_index);
 } 
 
 }
