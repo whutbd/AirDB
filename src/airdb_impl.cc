@@ -104,22 +104,17 @@ void AirDBImpl::CommitIndex() {
         LOG(INFO, "begin to CommitIndex");
         int ret = -1;
         for(int i = start_idx + 1; i <= end_idx; ++i) {
-            LOG(INFO, "==== aaa ;binglog read i is [%d]===", i);
             BinLogEntry log_entry;
             std::string type_and_value;
             bool slot_ok = binlogger_->ReadSlot(i, &log_entry);
             assert(slot_ok);
-            LOG(INFO, "====bbb===");
             switch(log_entry.op) {
                 case kPutOp:
                 case kLockOp:
-                     LOG(INFO, "beign commit put");
                      type_and_value.append(1, static_cast<char>(log_entry.op));
                      type_and_value.append(log_entry.value);
                      //Status s = data_store_->Put(log_entry.key, type_and_value);
                      data_store_->Put(log_entry.key, type_and_value);
-                     LOG(INFO, "commit put success");
-                    // assert(s == kOk);
                      break;
                 case kDeleteOp:
                 case kUnLockOp:
@@ -159,7 +154,6 @@ void AirDBImpl::CommitIndex() {
            ++last_applied_index_;
            data_store_->Put(tag_last_applied_index, 
                                          BinLogger::IntToString(last_applied_index_));
-           LOG(INFO, "==== last_applied_index_ is [%d]", last_applied_index_);
            mu_.Unlock();
         }
         mu_.Lock();
@@ -209,7 +203,6 @@ void AirDBImpl::VoteLeader() {
     std::vector<std::string>::iterator iter = all_server_addr_.begin();
     for(; iter != all_server_addr_.end(); ++iter) {
     	std::string addr = *iter;
-        LOG(INFO, "vote addr[%s]", addr.c_str());
         if (*iter == self_addr_) {
 	    continue;
 	}
@@ -320,7 +313,6 @@ void AirDBImpl::SwitchToLeader() {
 
 void AirDBImpl::StartReplicaLog(){
     mu_.AssertHeld();
-    LOG(INFO, "StartReplicateLog");
     std::vector<std::string>::const_iterator it = all_server_addr_.begin();
     for(; it != all_server_addr_.end(); ++it) {
         if (*it == self_addr_) {
@@ -332,9 +324,7 @@ void AirDBImpl::StartReplicaLog(){
             continue;
         }
         std::string follower_addr = *it;
-        LOG(INFO, "StartReplicaLog [%s]",follower_addr.c_str());
         next_index_[follower_addr] = binlogger_->GetLength();
-        LOG(INFO, "===== StartReplicaLog binlogger_[%d]", binlogger_->GetLength());
         match_index_[follower_addr] = -1;
         replica_pool_.AddTask(boost::bind(&AirDBImpl::ReplicateLog,
                                                  this, follower_addr));
@@ -366,7 +356,6 @@ void AirDBImpl::ReplicateLog(const std::string& follower_addr) {
             LOG(INFO, "stop realicate log, no longger leader"); 
             break;
         }
-        LOG(INFO, "===== next_index_[%s] is [%d]", follower_addr.c_str(), next_index_[follower_addr]);
         int64_t index = next_index_[follower_addr];
         int64_t cur_term = current_term_;
         int64_t prev_index = index - 1;
@@ -376,7 +365,6 @@ void AirDBImpl::ReplicateLog(const std::string& follower_addr) {
         if (!latest_replicating_ok) {
             batch_range = std::min(1L, batch_range);
         }
-        LOG(INFO, "batch_range[%d]", batch_range);
         int64_t max_term = -1;
         std::string leader_addr = self_addr_;
         BinLogEntry prev_log_entry;
@@ -397,7 +385,6 @@ void AirDBImpl::ReplicateLog(const std::string& follower_addr) {
         AppendEntriesResponse response;
         request.set_term(cur_term);
         request.set_leader_id(leader_addr);
-        LOG(INFO, "==== zz prev_index[%d]", prev_index);
         request.set_prev_log_index(prev_index);
         request.set_prev_log_term(prev_term);
         request.set_leader_commit_index(cur_commit_index);
@@ -410,7 +397,6 @@ void AirDBImpl::ReplicateLog(const std::string& follower_addr) {
                 has_bad_slot = true;
                 break;
             }
-            LOG(INFO, "==== add Entry to slaver====");
             Entry * entry = request.add_entries();
             entry->set_term(log_entry.term);
             entry->set_key(log_entry.key);
@@ -423,8 +409,6 @@ void AirDBImpl::ReplicateLog(const std::string& follower_addr) {
             mu_.Lock();
             break;
         }
-        LOG(INFO,"ReplicateLog[%s]", follower_addr.c_str());
-        LOG(INFO,"req prev_log_index[%d]", request.prev_log_index());
         bool ret = rpc_client_.SendRequest(stub, &AirDB_Stub::AppendEntries,
                         &request,
                         &response, 60, 1);
@@ -444,7 +428,6 @@ void AirDBImpl::ReplicateLog(const std::string& follower_addr) {
             LOG(INFO, "rpc has error during realication");
             break;
         }*/
-        LOG(INFO, "max term is [%d]", max_term);
         if (ret) {
             if (response.success()) {
                 LOG(INFO, "replica[%s] success", follower_addr.c_str());
@@ -690,7 +673,6 @@ void AirDBImpl::HeartBeatCallBack(const AppendEntriesRequest* req,
 void AirDBImpl::Put(google::protobuf::RpcController* controller,
 		    const PutRequest* req, PutResponse* res,
 		    google::protobuf::Closure* done) {
-    LOG(INFO, "this is put");
     MutexLock lock(&mu_);
     if (status_ != kLeader) {
 	LOG(INFO,"1 is no longer leader");
@@ -716,7 +698,6 @@ void AirDBImpl::Put(google::protobuf::RpcController* controller,
 void AirDBImpl::Get(google::protobuf::RpcController* controller,
                     const GetRequest* req, GetResponse* res,
                     google::protobuf::Closure* done) {
-    LOG(INFO, "this is get");
     int64_t start_time = common::get_micros();
     MutexLock lock(&mu_);
     if (status_ != kLeader) {
