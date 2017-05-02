@@ -7,5 +7,6 @@
 AirDB设计思想实现的是CP，尽最大努力提高A
 * 读4.8W 
 * 写9K
-
+# 谈谈paxos, multi-paxos, raft
+  multi-paxos, raft 都是对一堆连续的问题达成一致的协议, 而paxos 是对一个问题达成一致的协议, 因此multi-paxos, raft 其实都是为了简化paxos 在多个问题上面达成一致的需要的两个阶段, 因此都简化了prepare 阶段, 提出了通过有leader 来简化这个过程. multi-paxos, raft 只是简化不一样, raft 让用户的log 必须是有序, 选主必须是有日志最全的节点, 而multi-paxos 没有这些限制. 因此raft 的实现会更简单
 
